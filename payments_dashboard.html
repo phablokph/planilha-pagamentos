@@ -317,3 +317,66 @@
       if (!lista[i]) return;
       if (!confirm("Deseja excluir este item?")) return;
       lista.splice(i, 1); salvarDados(); renderizar();
+    }
+
+    window.editarDescricao = function(id, i, texto) {
+      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      if (!lista[i]) return;
+      lista[i].nome = texto.trim();
+      salvarDados();
+    }
+
+    window.editarValor = function(id, i, texto) {
+      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      if (!lista[i]) return;
+      let valor = parseFloat(texto.replace(",", "."));
+      if (!isNaN(valor)) lista[i].valor = valor;
+      salvarDados();
+    }
+
+    window.mudarMes = function() {
+      dados.mes = (dados.mes + 1) % 12;
+      if (dados.mes === 0) dados.ano++;
+      dados.fixos.forEach(f => f.pago = false);
+      dados.variaveis = [];
+      salvarDados(); renderizar();
+    }
+
+    window.limparTudo = function() {
+      if (confirm("Deseja apagar todos os dados?")) {
+        dados = { mes: new Date().getMonth(), ano: new Date().getFullYear(), fixos: [], variaveis: [] };
+        salvarDados(); renderizar();
+      }
+    }
+
+    /* ===== Helpers ===== */
+    function atualizarResumo() {
+      let resumoFixos = calcularResumo(dados.fixos);
+      let resumoVariaveis = calcularResumo(dados.variaveis);
+      document.getElementById("resumoFixos").innerText = `Fixos - Pago: R$ ${resumoFixos.pago.toFixed(2)} | Pendente: R$ ${resumoFixos.pendente.toFixed(2)}`;
+      document.getElementById("resumoVariaveis").innerText = `Variáveis - Pago: R$ ${resumoVariaveis.pago.toFixed(2)} | Pendente: R$ ${resumoVariaveis.pendente.toFixed(2)}`;
+      document.getElementById("resumoGeral").innerText = `Total Geral - Pago: R$ ${(resumoFixos.pago + resumoVariaveis.pago).toFixed(2)} | Pendente: R$ ${(resumoFixos.pendente + resumoVariaveis.pendente).toFixed(2)}`;
+    }
+
+    function calcularResumo(lista) {
+      let pago = 0, pendente = 0;
+      (lista || []).forEach(item => {
+        const valor = Number(item.valor) || 0;
+        if (item.pago) pago += valor; else pendente += valor;
+      });
+      return { pago, pendente };
+    }
+
+    function nomeMes(num) {
+      return ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][num];
+    }
+
+    function escapeHtml(unsafe) {
+      return String(unsafe)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+  </script>
+</body>
+</html>
