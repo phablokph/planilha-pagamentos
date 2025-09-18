@@ -1,30 +1,53 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Planilha de Pagamentos</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f4f6f8; margin: 0; padding: 20px; }
-    h1, h2 { text-align: center; }
-    .container { max-width: 900px; margin: auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    h1, h2 { text-align: center; margin: 8px 0; }
+    .container { max-width: 900px; margin: 12px auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); position: relative; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
     th { background: #f0f0f0; }
     .paid { background: #d4edda; color: #155724; }
     .unpaid { background: #f8d7da; color: #721c24; }
-    .controls { margin-top: 15px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-    button { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    .controls { margin-top: 10px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    button { padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
     .btn-green { background: #28a745; color: white; }
     .btn-red { background: #dc3545; color: white; }
     .btn-blue { background: #007bff; color: white; }
     input { padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
-    footer { margin-top: 20px; text-align: center; font-size: 14px; color: #555; }
+    footer { margin-top: 18px; text-align: center; font-size: 14px; color: #555; }
     .resumo { margin-top: 10px; text-align: right; font-weight: bold; }
+    /* auth bar */
+    #authBar { display:flex; gap:10px; justify-content: flex-end; align-items:center; margin-bottom:8px; }
+    #statusUser { font-size:13px; color:#333; }
+    /* overlay (quando não logado) */
+    #overlayNotLogged { position:absolute; inset:0; background: rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; border-radius:12px; flex-direction:column; gap:12px; }
+    #overlayNotLogged.hidden { display:none; }
+    .small { font-size:13px; color:#666; }
   </style>
 </head>
 <body>
   <div class="container">
+    <div id="authBar">
+      <span id="statusUser" class="small">Carregando autenticação...</span>
+      <button id="btnSignIn" class="btn-blue">Entrar com Google</button>
+      <button id="btnSignOut" class="btn-red" style="display:none;">Sair</button>
+    </div>
+
+    <div id="overlayNotLogged" class="">
+      <div style="text-align:center;">
+        <strong>Entre com sua conta Google para sincronizar</strong>
+        <div class="small">Se você não entrar, os dados ficarão apenas no seu navegador (localStorage).</div>
+      </div>
+      <div>
+        <button id="overlaySignIn" class="btn-blue">Entrar com Google</button>
+      </div>
+    </div>
+
     <h1>Planilha de Pagamentos</h1>
     <h2 id="mesAtual"></h2>
 
@@ -64,16 +87,30 @@
     <h2>Total Geral</h2>
     <div id="resumoGeral" class="resumo"></div>
 
-    <footer>
-      Desenvolvido por Phablo Salazar - 2025
-    </footer>
+    <footer>Desenvolvido por Phablo Salazar - 2025</footer>
   </div>
 
   <script type="module">
-    // Import Firebase SDKs
+    /* ============================
+       IMPORTS FIREBASE (modular)
+       ============================ */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signOut,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      onSnapshot,
+      setDoc,
+      getDoc
+    } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-    // ===== CONFIG DO SEU PROJETO FIREBASE =====
+    /* ===== CONFIG DO SEU PROJETO FIREBASE ===== */
     const firebaseConfig = {
       apiKey: "AIzaSyDw0Ga5hqiJjaDnIVnaCgLB32qte40FcbM",
       authDomain: "planilha-de-pagamentos-cd342.firebaseapp.com",
@@ -83,22 +120,138 @@
       appId: "1:870060266299:web:1beca6d3ad85b020fadd1e"
     };
 
-    // Inicializa Firebase
     const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
 
-    // ====== LÓGICA LOCALSTORAGE (mantém dados mesmo após atualizar) ======
+    /* ===== Variáveis de estado ===== */
+    let userId = null;
+    let userRef = null;
+    let unsubscribeSnapshot = null;
     let dados = { mes: new Date().getMonth(), ano: new Date().getFullYear(), fixos: [], variaveis: [] };
 
-    function salvarDados() {
-      localStorage.setItem("pagamentos", JSON.stringify(dados));
+    /* ===== UI elementos ===== */
+    const statusUser = document.getElementById("statusUser");
+    const btnSignIn = document.getElementById("btnSignIn");
+    const btnSignOut = document.getElementById("btnSignOut");
+    const overlayNotLogged = document.getElementById("overlayNotLogged");
+    const overlaySignIn = document.getElementById("overlaySignIn");
+
+    /* ===== Behavior dos botões de autenticação ===== */
+    btnSignIn.addEventListener("click", () => signInWithGoogle());
+    overlaySignIn.addEventListener("click", () => signInWithGoogle());
+    btnSignOut.addEventListener("click", () => signOutUser());
+
+    /* ===== Início: carregar dados do localStorage (fallback) e renderizar ===== */
+    carregarDadosLocal();
+    renderizar();
+
+    /* ===== Observa autenticação ===== */
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        userId = user.uid;
+        userRef = doc(db, "users", userId);
+        statusUser.innerText = `Conectado: ${user.email || userId}`;
+        btnSignOut.style.display = "inline-block";
+        btnSignIn.style.display = "none";
+        overlayNotLogged.classList.add("hidden");
+
+        // Se já houver documento no Firestore, onSnapshot trará ele
+        if (unsubscribeSnapshot) unsubscribeSnapshot();
+        unsubscribeSnapshot = onSnapshot(userRef, (snap) => {
+          if (snap.exists()) {
+            // Atualiza dados locais com dados do servidor e renderiza
+            const remote = snap.data();
+            // valida campos (se faltar arrays, garantir que existam)
+            if (!remote.fixos) remote.fixos = [];
+            if (!remote.variaveis) remote.variaveis = [];
+            dados = remote;
+            // também atualiza localStorage para fallback offline
+            localStorage.setItem("pagamentos", JSON.stringify(dados));
+            renderizar();
+          } else {
+            // documento inexistente → salvar o default atual (ou vazio)
+            salvarDados();
+          }
+        }, (err) => {
+          console.error("Erro onSnapshot:", err);
+        });
+
+      } else {
+        // não autenticado
+        userId = null;
+        userRef = null;
+        if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+        statusUser.innerText = "Não autenticado (modo local)";
+        btnSignOut.style.display = "none";
+        btnSignIn.style.display = "inline-block";
+        overlayNotLogged.classList.remove("hidden");
+        // carregar dados do localStorage (já foi feito ao carregar a página)
+        carregarDadosLocal();
+        renderizar();
+      }
+    });
+
+    /* ===== Funções de autenticação ===== */
+    async function signInWithGoogle() {
+      try {
+        await signInWithPopup(auth, provider);
+        // onAuthStateChanged cuidará do resto
+      } catch (err) {
+        console.error("Erro login:", err);
+        alert("Erro ao efetuar login: " + (err.message || err));
+      }
     }
 
-    function carregarDados() {
-      let armazenado = localStorage.getItem("pagamentos");
-      if (armazenado) dados = JSON.parse(armazenado);
-      renderizar();
+    async function signOutUser() {
+      try {
+        await signOut(auth);
+        // onAuthStateChanged cuidará do resto
+      } catch (err) {
+        console.error("Erro signOut:", err);
+      }
     }
 
+    /* ===== Salvar dados (local + Firestore quando logado) ===== */
+    async function salvarDados() {
+      // salva local sempre (fallback)
+      try {
+        localStorage.setItem("pagamentos", JSON.stringify(dados));
+      } catch (e) {
+        console.warn("Não foi possível salvar no localStorage:", e);
+      }
+
+      // salva no Firestore quando usuário está logado
+      if (userRef) {
+        try {
+          await setDoc(userRef, dados);
+        } catch (err) {
+          console.error("Erro ao salvar no Firestore:", err);
+          // Você pode mostrar um aviso ao usuário aqui
+        }
+      }
+    }
+
+    /* ===== Carregar dados local (fallback) ===== */
+    function carregarDadosLocal() {
+      try {
+        const armazenado = localStorage.getItem("pagamentos");
+        if (armazenado) {
+          const parsed = JSON.parse(armazenado);
+          // validação simples
+          if (parsed && typeof parsed === "object") {
+            if (!parsed.fixos) parsed.fixos = [];
+            if (!parsed.variaveis) parsed.variaveis = [];
+            dados = parsed;
+          }
+        }
+      } catch (e) {
+        console.warn("Erro lendo localStorage:", e);
+      }
+    }
+
+    /* ===== Render / UI ===== */
     function renderizar() {
       document.getElementById("mesAtual").innerText = `Mês Atual: ${nomeMes(dados.mes)} / ${dados.ano}`;
       renderizarTabela("fixosTable", dados.fixos);
@@ -110,13 +263,15 @@
       let tbody = document.querySelector(`#${id} tbody`);
       tbody.innerHTML = "";
       lista.forEach((item, i) => {
+        const nomeEsc = escapeHtml(item.nome || "");
+        const valorDisplay = (typeof item.valor === "number") ? item.valor.toFixed(2) : (item.valor || "");
         let row = `<tr class="${item.pago ? 'paid':'unpaid'}">
-          <td contenteditable="true" onblur="editarDescricao('${id}', ${i}, this.innerText)">${item.nome}</td>
-          <td contenteditable="true" onblur="editarValor('${id}', ${i}, this.innerText)">${item.valor}</td>
+          <td contenteditable="true" onblur="editarDescricao('${id}', ${i}, this.innerText)">${nomeEsc}</td>
+          <td contenteditable="true" onblur="editarValor('${id}', ${i}, this.innerText)">${valorDisplay}</td>
           <td>${item.pago ? 'Pago':'Pendente'}</td>
           <td>
             <button class="btn-green" onclick="marcarPago('${id}', ${i})">✔ Pagar</button>
-            <button class="btn-red" onclick="desfazerPagamento('${id}', ${i})">↩ Desfazer</button>
+            <button class="btn-blue" onclick="desfazerPagamento('${id}', ${i})">↩ Desfazer</button>
             <button class="btn-red" onclick="excluirItem('${id}', ${i})">✖ Excluir</button>
           </td>
         </tr>`;
@@ -124,84 +279,41 @@
       });
     }
 
-    function adicionarFixo() {
-      let nome = document.getElementById("nomeFixo").value;
+    /* ===== Funções de manipulação (expostas para onclick inline) ===== */
+    window.adicionarFixo = function() {
+      let nome = document.getElementById("nomeFixo").value.trim();
       let valor = document.getElementById("valorFixo").value;
-      if (!nome || !valor) return;
+      if (!nome || !valor) return alert("Preencha descrição e valor.");
       dados.fixos.push({ nome, valor: parseFloat(valor), pago: false });
+      document.getElementById("nomeFixo").value = "";
+      document.getElementById("valorFixo").value = "";
       salvarDados(); renderizar();
     }
 
-    function adicionarVariavel() {
-      let nome = document.getElementById("nomeVar").value;
+    window.adicionarVariavel = function() {
+      let nome = document.getElementById("nomeVar").value.trim();
       let valor = document.getElementById("valorVar").value;
-      if (!nome || !valor) return;
+      if (!nome || !valor) return alert("Preencha descrição e valor.");
       dados.variaveis.push({ nome, valor: parseFloat(valor), pago: false });
+      document.getElementById("nomeVar").value = "";
+      document.getElementById("valorVar").value = "";
       salvarDados(); renderizar();
     }
 
-    function marcarPago(id, i) {
+    window.marcarPago = function(id, i) {
       let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      if (!lista[i]) return;
       lista[i].pago = true; salvarDados(); renderizar();
     }
 
-    function desfazerPagamento(id, i) {
+    window.desfazerPagamento = function(id, i) {
       let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      if (!lista[i]) return;
       lista[i].pago = false; salvarDados(); renderizar();
     }
 
-    function excluirItem(id, i) {
+    window.excluirItem = function(id, i) {
       let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      if (!lista[i]) return;
+      if (!confirm("Deseja excluir este item?")) return;
       lista.splice(i, 1); salvarDados(); renderizar();
-    }
-
-    function editarDescricao(id, i, texto) {
-      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      lista[i].nome = texto; salvarDados();
-    }
-
-    function editarValor(id, i, texto) {
-      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      let valor = parseFloat(texto.replace(",", ".")); 
-      if (!isNaN(valor)) lista[i].valor = valor; 
-      salvarDados();
-    }
-
-    function mudarMes() {
-      dados.mes = (dados.mes + 1) % 12;
-      if (dados.mes === 0) dados.ano++;
-      dados.fixos.forEach(f => f.pago = false);
-      dados.variaveis = [];
-      salvarDados(); renderizar();
-    }
-
-    function limparTudo() {
-      if (confirm("Deseja apagar todos os dados?")) {
-        localStorage.removeItem("pagamentos");
-        dados = { mes: new Date().getMonth(), ano: new Date().getFullYear(), fixos: [], variaveis: [] };
-        renderizar();
-      }
-    }
-
-    function atualizarResumo() {
-      let resumoFixos = calcularResumo(dados.fixos);
-      let resumoVariaveis = calcularResumo(dados.variaveis);
-      document.getElementById("resumoFixos").innerText = `Fixos - Pago: R$ ${resumoFixos.pago.toFixed(2)} | Pendente: R$ ${resumoFixos.pendente.toFixed(2)}`;
-      document.getElementById("resumoVariaveis").innerText = `Variáveis - Pago: R$ ${resumoVariaveis.pago.toFixed(2)} | Pendente: R$ ${resumoVariaveis.pendente.toFixed(2)}`;
-      document.getElementById("resumoGeral").innerText = `Total Geral - Pago: R$ ${(resumoFixos.pago + resumoVariaveis.pago).toFixed(2)} | Pendente: R$ ${(resumoFixos.pendente + resumoVariaveis.pendente).toFixed(2)}`;
-    }
-
-    function calcularResumo(lista) {
-      let pago = 0, pendente = 0;
-      lista.forEach(item => item.pago ? pago += item.valor : pendente += item.valor);
-      return { pago, pendente };
-    }
-
-    function nomeMes(num) {
-      return ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][num];
-    }
-
-    carregarDados();
-  </script>
-</body>
-</html>
