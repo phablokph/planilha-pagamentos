@@ -1,200 +1,135 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Planilha de Pagamentos (com Firebase)</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planilha de Pagamentos</title>
   <style>
-    body { font-family: Arial, sans-serif; background:#f4f6f8; margin:0; padding:20px; }
-    .container { max-width:950px; margin:auto; background:#fff; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
-    h1,h2{text-align:center}
-    table{width:100%;border-collapse:collapse;margin-top:20px}
-    th,td{border:1px solid #ddd;padding:10px;text-align:center}
-    th{background:#f0f0f0}
-    .paid{background:#d4edda;color:#155724}
-    .unpaid{background:#f8d7da;color:#721c24}
-    .controls{margin-top:15px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-    button{padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:bold}
-    .btn-green{background:#28a745;color:white}
-    .btn-red{background:#dc3545;color:white}
-    .btn-gray{background:#6c757d;color:white}
-    .btn-blue{background:#007bff;color:white}
-    .btn-yellow{background:#ffc107;color:black}
-    input{padding:8px;border-radius:6px;border:1px solid #ccc}
-    .resumo{margin-top:10px;font-weight:bold;text-align:center}
-    .total-geral{margin-top:20px;padding:10px;background:#e9ecef;border-radius:8px;font-weight:bold;text-align:center}
-    #app, #logoutBtn { display:none; }
-    .loginBox{max-width:420px;margin:10px auto;padding:16px;border-radius:8px;background:#fff;border:1px solid #ddd;text-align:center}
-    .small {font-size:0.9rem;color:#666}
+    body { font-family: Arial, sans-serif; background: #f4f6f8; margin: 0; padding: 20px; }
+    h1, h2 { text-align: center; }
+    .container { max-width: 900px; margin: auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #f0f0f0; }
+    .paid { background: #d4edda; color: #155724; }
+    .unpaid { background: #f8d7da; color: #721c24; }
+    .controls { margin-top: 15px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    button { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    .btn-green { background: #28a745; color: white; }
+    .btn-red { background: #dc3545; color: white; }
+    .btn-blue { background: #007bff; color: white; }
+    input { padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
+    footer { margin-top: 20px; text-align: center; font-size: 14px; color: #555; }
+    .resumo { margin-top: 10px; text-align: right; font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Planilha de Pagamentos</h1>
+    <h2 id="mesAtual"></h2>
 
-    <!-- Login -->
-    <div id="loginBox" class="loginBox">
-      <h2>Entrar para sincronizar</h2>
-      <input id="email" type="email" placeholder="E-mail" style="width:90%;margin:6px 0"><br>
-      <input id="password" type="password" placeholder="Senha" style="width:90%;margin:6px 0"><br>
-      <div class="controls">
-        <button class="btn-green" id="btnSignIn">Entrar</button>
-        <button class="btn-blue" id="btnSignUp">Criar conta</button>
-        <button class="btn-gray" id="btnGoogle">Entrar com Google</button>
-      </div>
-      <p class="small">Se preferir não entrar, a planilha funciona localmente (sem sincronizar entre aparelhos).</p>
+    <div class="controls">
+      <button class="btn-blue" onclick="mudarMes()">Mudar Mês</button>
+      <button class="btn-red" onclick="limparTudo()">Limpar Tudo</button>
     </div>
 
-    <!-- App -->
-    <div id="app">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-        <h2 id="mesAtual"></h2>
-        <div>
-          <button id="logoutBtn" class="btn-red">Sair</button>
-        </div>
-      </div>
-
-      <div class="controls">
-        <button class="btn-blue" id="mudarMesBtn">Mudar Mês</button>
-        <button class="btn-yellow" id="exportPdfBtn">Exportar PDF</button>
-        <button class="btn-yellow" id="exportXlsBtn">Exportar Excel</button>
-      </div>
-
-      <h2>Gastos Fixos</h2>
-      <div class="controls">
-        <input type="text" id="nomeFixo" placeholder="Descrição">
-        <input type="number" id="valorFixo" placeholder="Valor">
-        <button class="btn-green" id="addFixo">Adicionar Fixo</button>
-      </div>
-      <table id="fixosTable"><thead><tr><th>Descrição</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table>
-      <div id="resumoFixos" class="resumo"></div>
-
-      <h2>Gastos Variáveis</h2>
-      <div class="controls">
-        <input type="text" id="nomeVar" placeholder="Descrição">
-        <input type="number" id="valorVar" placeholder="Valor">
-        <button class="btn-green" id="addVar">Adicionar Variável</button>
-      </div>
-      <table id="variaveisTable"><thead><tr><th>Descrição</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table>
-      <div id="resumoVariaveis" class="resumo"></div>
-
-      <div id="totalGeral" class="total-geral"></div>
-      <footer style="margin-top:20px;text-align:center;color:#555">Desenvolvido por Phablo Salazar - 2025</footer>
+    <h2>Gastos Fixos</h2>
+    <div class="controls">
+      <input type="text" id="nomeFixo" placeholder="Descrição">
+      <input type="number" id="valorFixo" placeholder="Valor">
+      <button class="btn-green" onclick="adicionarFixo()">Adicionar Fixo</button>
     </div>
+    <table id="fixosTable">
+      <thead>
+        <tr><th>Descrição</th><th>Valor</th><th>Status</th><th>Ações</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="resumoFixos" class="resumo"></div>
+
+    <h2>Gastos Variáveis</h2>
+    <div class="controls">
+      <input type="text" id="nomeVar" placeholder="Descrição">
+      <input type="number" id="valorVar" placeholder="Valor">
+      <button class="btn-green" onclick="adicionarVariavel()">Adicionar Variável</button>
+    </div>
+    <table id="variaveisTable">
+      <thead>
+        <tr><th>Descrição</th><th>Valor</th><th>Status</th><th>Ações</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="resumoVariaveis" class="resumo"></div>
+
+    <h2>Total Geral</h2>
+    <div id="resumoGeral" class="resumo"></div>
+
+    <footer>
+      Desenvolvido por Phablo Salazar - 2025
+    </footer>
   </div>
 
-  <!-- libs para export (pdf/excel) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
-  <!-- Firebase (ES modules via CDN). Substitua abaixo pelo seu config -->
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
-    import {
-      getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-      GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
-    } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
-    import {
-      getFirestore, doc, setDoc, getDoc, onSnapshot
-    } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+    // Import Firebase SDKs
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 
-    // ====== COLE AQUI O SEU firebaseConfig (do console Firebase) ======
+    // ===== CONFIG DO SEU PROJETO FIREBASE =====
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT",
-      // demais campos (storageBucket, messagingSenderId, appId) se existirem
+      apiKey: "AIzaSyDw0Ga5hqiJjaDnIVnaCgLB32qte40FcbM",
+      authDomain: "planilha-de-pagamentos-cd342.firebaseapp.com",
+      projectId: "planilha-de-pagamentos-cd342",
+      storageBucket: "planilha-de-pagamentos-cd342.firebasestorage.app",
+      messagingSenderId: "870060266299",
+      appId: "1:870060266299:web:1beca6d3ad85b020fadd1e"
     };
-    // ==================================================================
 
     // Inicializa Firebase
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const provider = new GoogleAuthProvider();
 
-    // ELEMENTOS
-    const loginBox = document.getElementById('loginBox');
-    const appDiv = document.getElementById('app');
-    const logoutBtn = document.getElementById('logoutBtn');
-
-    // botões e inputs
-    document.getElementById('btnSignIn').onclick = signIn;
-    document.getElementById('btnSignUp').onclick = signUp;
-    document.getElementById('btnGoogle').onclick = signInWithGoogle;
-    document.getElementById('logoutBtn').onclick = signOutUser;
-
-    document.getElementById('addFixo').onclick = adicionarFixo;
-    document.getElementById('addVar').onclick = adicionarVariavel;
-    document.getElementById('mudarMesBtn').onclick = mudarMes;
-    document.getElementById('exportPdfBtn').onclick = exportarPDF;
-    document.getElementById('exportXlsBtn').onclick = exportarExcel;
-
-    // Dados locais / fallback
+    // ====== LÓGICA LOCALSTORAGE (mantém dados mesmo após atualizar) ======
     let dados = { mes: new Date().getMonth(), ano: new Date().getFullYear(), fixos: [], variaveis: [] };
-    let userDocRef = null;
-    let unsubscribeSnapshot = null;
 
-    // localStorage fallback: carrega antes de qualquer login (para usar local sem nuvem)
-    const LS_KEY = "pagamentos_local";
-    function salvarLocal() { localStorage.setItem(LS_KEY, JSON.stringify(dados)); }
-    function carregarLocal() {
-      const a = localStorage.getItem(LS_KEY);
-      if (a) dados = JSON.parse(a);
+    function salvarDados() {
+      localStorage.setItem("pagamentos", JSON.stringify(dados));
     }
-    carregarLocal();
 
-    // Render
+    function carregarDados() {
+      let armazenado = localStorage.getItem("pagamentos");
+      if (armazenado) dados = JSON.parse(armazenado);
+      renderizar();
+    }
+
     function renderizar() {
       document.getElementById("mesAtual").innerText = `Mês Atual: ${nomeMes(dados.mes)} / ${dados.ano}`;
-      renderizarTabela("fixosTable", dados.fixos, "resumoFixos");
-      renderizarTabela("variaveisTable", dados.variaveis, "resumoVariaveis");
-      atualizarTotalGeral();
+      renderizarTabela("fixosTable", dados.fixos);
+      renderizarTabela("variaveisTable", dados.variaveis);
+      atualizarResumo();
     }
 
-    function renderizarTabela(id, lista, resumoId) {
+    function renderizarTabela(id, lista) {
       let tbody = document.querySelector(`#${id} tbody`);
       tbody.innerHTML = "";
-      let totalPago = 0, totalPendente = 0;
       lista.forEach((item, i) => {
-        let valor = parseFloat(item.valor) || 0;
-        if (item.pago) totalPago += valor; else totalPendente += valor;
         let row = `<tr class="${item.pago ? 'paid':'unpaid'}">
           <td contenteditable="true" onblur="editarDescricao('${id}', ${i}, this.innerText)">${item.nome}</td>
-          <td contenteditable="true" onblur="editarValor('${id}', ${i}, this.innerText)">${formatarMoeda(item.valor)}</td>
+          <td contenteditable="true" onblur="editarValor('${id}', ${i}, this.innerText)">${item.valor}</td>
           <td>${item.pago ? 'Pago':'Pendente'}</td>
           <td>
-            <button class="btn-green" onclick="marcarPago('${id}', ${i})">✔</button>
-            <button class="btn-red" onclick="desfazerPago('${id}', ${i})">↩</button>
-            <button class="btn-gray" onclick="excluirItem('${id}', ${i})">🗑</button>
+            <button class="btn-green" onclick="marcarPago('${id}', ${i})">✔ Pagar</button>
+            <button class="btn-red" onclick="desfazerPagamento('${id}', ${i})">↩ Desfazer</button>
+            <button class="btn-red" onclick="excluirItem('${id}', ${i})">✖ Excluir</button>
           </td>
         </tr>`;
         tbody.innerHTML += row;
       });
-      document.getElementById(resumoId).innerText =
-        `Total Pago: ${formatarMoeda(totalPago)} | Pendente: ${formatarMoeda(totalPendente)}`;
     }
 
-    function atualizarTotalGeral() {
-      let totalPago = 0, totalPendente = 0;
-      [...dados.fixos, ...dados.variaveis].forEach(item => {
-        let valor = parseFloat(item.valor) || 0;
-        if (item.pago) totalPago += valor; else totalPendente += valor;
-      });
-      document.getElementById("totalGeral").innerText =
-        `TOTAL GERAL → Pago: ${formatarMoeda(totalPago)} | Pendente: ${formatarMoeda(totalPendente)}`;
-    }
-
-    // Ações CRUD — após cada alteração, salvamos (local ou na nuvem)
     function adicionarFixo() {
       let nome = document.getElementById("nomeFixo").value;
       let valor = document.getElementById("valorFixo").value;
       if (!nome || !valor) return;
       dados.fixos.push({ nome, valor: parseFloat(valor), pago: false });
-      afterChange();
-      document.getElementById("nomeFixo").value = "";
-      document.getElementById("valorFixo").value = "";
+      salvarDados(); renderizar();
     }
 
     function adicionarVariavel() {
@@ -202,43 +137,34 @@
       let valor = document.getElementById("valorVar").value;
       if (!nome || !valor) return;
       dados.variaveis.push({ nome, valor: parseFloat(valor), pago: false });
-      afterChange();
-      document.getElementById("nomeVar").value = "";
-      document.getElementById("valorVar").value = "";
+      salvarDados(); renderizar();
     }
 
     function marcarPago(id, i) {
       let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      lista[i].pago = true;
-      afterChange();
-    }
-    function desfazerPago(id, i) {
-      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      lista[i].pago = false;
-      afterChange();
-    }
-    function excluirItem(id, i) {
-      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      lista.splice(i, 1);
-      afterChange();
-    }
-    window.editarDescricao = function(id, i, texto) {
-      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      lista[i].nome = texto;
-      afterChange();
-    }
-    window.editarValor = function(id, i, texto) {
-      let valor = parseFloat(texto.replace("R$", "").replace(",", "."));
-      if (isNaN(valor)) return;
-      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
-      lista[i].valor = valor;
-      afterChange();
+      lista[i].pago = true; salvarDados(); renderizar();
     }
 
-    function afterChange() {
-      renderizar();
-      if (userDocRef) saveToFirestore();
-      else salvarLocal();
+    function desfazerPagamento(id, i) {
+      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      lista[i].pago = false; salvarDados(); renderizar();
+    }
+
+    function excluirItem(id, i) {
+      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      lista.splice(i, 1); salvarDados(); renderizar();
+    }
+
+    function editarDescricao(id, i, texto) {
+      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      lista[i].nome = texto; salvarDados();
+    }
+
+    function editarValor(id, i, texto) {
+      let lista = id === "fixosTable" ? dados.fixos : dados.variaveis;
+      let valor = parseFloat(texto.replace(",", ".")); 
+      if (!isNaN(valor)) lista[i].valor = valor; 
+      salvarDados();
     }
 
     function mudarMes() {
@@ -246,159 +172,36 @@
       if (dados.mes === 0) dados.ano++;
       dados.fixos.forEach(f => f.pago = false);
       dados.variaveis = [];
-      afterChange();
+      salvarDados(); renderizar();
+    }
+
+    function limparTudo() {
+      if (confirm("Deseja apagar todos os dados?")) {
+        localStorage.removeItem("pagamentos");
+        dados = { mes: new Date().getMonth(), ano: new Date().getFullYear(), fixos: [], variaveis: [] };
+        renderizar();
+      }
+    }
+
+    function atualizarResumo() {
+      let resumoFixos = calcularResumo(dados.fixos);
+      let resumoVariaveis = calcularResumo(dados.variaveis);
+      document.getElementById("resumoFixos").innerText = `Fixos - Pago: R$ ${resumoFixos.pago.toFixed(2)} | Pendente: R$ ${resumoFixos.pendente.toFixed(2)}`;
+      document.getElementById("resumoVariaveis").innerText = `Variáveis - Pago: R$ ${resumoVariaveis.pago.toFixed(2)} | Pendente: R$ ${resumoVariaveis.pendente.toFixed(2)}`;
+      document.getElementById("resumoGeral").innerText = `Total Geral - Pago: R$ ${(resumoFixos.pago + resumoVariaveis.pago).toFixed(2)} | Pendente: R$ ${(resumoFixos.pendente + resumoVariaveis.pendente).toFixed(2)}`;
+    }
+
+    function calcularResumo(lista) {
+      let pago = 0, pendente = 0;
+      lista.forEach(item => item.pago ? pago += item.valor : pendente += item.valor);
+      return { pago, pendente };
     }
 
     function nomeMes(num) {
       return ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][num];
     }
-    function formatarMoeda(valor) {
-      return parseFloat(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    }
 
-    // ===== Firebase: salvar/ler/sincronizar =====
-    async function saveToFirestore() {
-      if (!userDocRef) return;
-      try {
-        await setDoc(userDocRef, { dados }, { merge: true }); // grava/mescla o objeto
-      } catch (e) {
-        console.error("Erro gravando no Firestore:", e);
-      }
-    }
-
-    async function signUp() {
-      const email = document.getElementById('email').value;
-      const pass = document.getElementById('password').value;
-      try {
-        const userCred = await createUserWithEmailAndPassword(auth, email, pass);
-        // Ao criar, salvamos local -> nuvem (se houver dados locais)
-        await afterSignIn(userCred.user.uid);
-      } catch (e) { alert("Erro ao criar conta: "+e.message); }
-    }
-
-    async function signIn() {
-      const email = document.getElementById('email').value;
-      const pass = document.getElementById('password').value;
-      try {
-        const userCred = await signInWithEmailAndPassword(auth, email, pass);
-        await afterSignIn(userCred.user.uid);
-      } catch (e) { alert("Erro ao entrar: "+e.message); }
-    }
-
-    async function signInWithGoogle() {
-      try {
-        const userCred = await signInWithPopup(auth, provider);
-        await afterSignIn(userCred.user.uid);
-      } catch (e) { alert("Erro no Login Google: "+e.message); }
-    }
-
-    async function afterSignIn(uid) {
-      // referência ao documento do usuário
-      userDocRef = doc(db, 'users', uid);
-
-      // Se existir dados locais (localStorage) e não existir documento na nuvem, subimos local -> nuvem
-      try {
-        const snap = await getDoc(userDocRef);
-        if (snap.exists()) {
-          // nuvem tem dados → usar nuvem (fonte da verdade)
-          const cloud = snap.data().dados;
-          if (cloud) {
-            dados = cloud;
-            salvarLocal(); // atualiza local
-          }
-        } else {
-          // não existe na nuvem → cria com os dados locais atuais
-          await setDoc(userDocRef, { dados });
-        }
-      } catch (e) { console.error("Erro ao sincronizar pós-login:", e); }
-
-      // Inscrever em mudanças em tempo real
-      if (unsubscribeSnapshot) unsubscribeSnapshot();
-      unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const remote = docSnap.data().dados;
-          // apenas atualiza se diferente (evita loops desnecessários)
-          if (JSON.stringify(remote) !== JSON.stringify(dados)) {
-            dados = remote;
-            salvarLocal();
-            renderizar();
-          }
-        }
-      });
-
-      // Mostra app
-      showApp();
-    }
-
-    function signOutUser() {
-      signOut(auth).then(() => {
-        // limpar referência e mostrar login
-        if (unsubscribeSnapshot) unsubscribeSnapshot();
-        userDocRef = null;
-        unsubscribeSnapshot = null;
-        showLogin();
-      });
-    }
-
-    // Monitora estado de autenticação
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // usuário já logado (ex: ao abrir o site)
-        afterSignIn(user.uid);
-      } else {
-        // nenhum usuário logado → mostra login, mas mantém dados locais
-        showLogin();
-        renderizar();
-      }
-    });
-
-    // Mostra/oculta:
-    function showLogin() {
-      loginBox.style.display = "block";
-      appDiv.style.display = "none";
-      logoutBtn.style.display = "none";
-    }
-    function showApp() {
-      loginBox.style.display = "none";
-      appDiv.style.display = "block";
-      logoutBtn.style.display = "inline-block";
-      renderizar();
-    }
-
-    // Export PDF / Excel (usa o objeto `dados`)
-    function exportarPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      doc.text(`Planilha de Pagamentos - ${nomeMes(dados.mes)}/${dados.ano}`, 14, 15);
-      const todasTabelas = [
-        { titulo: "Gastos Fixos", dados: dados.fixos },
-        { titulo: "Gastos Variáveis", dados: dados.variaveis }
-      ];
-      let y = 25;
-      todasTabelas.forEach(secao => {
-        doc.text(secao.titulo, 14, y);
-        y += 5;
-        let corpo = secao.dados.map(i => [i.nome, formatarMoeda(i.valor), i.pago ? "Pago":"Pendente"]);
-        doc.autoTable({ head: [["Descrição","Valor","Status"]], body: corpo, startY: y });
-        y = doc.lastAutoTable.finalY + 10;
-      });
-      doc.text(document.getElementById("totalGeral").innerText, 14, y + 10);
-      doc.save(`Planilha_${dados.ano}_${dados.mes+1}.pdf`);
-    }
-
-    function exportarExcel() {
-      let wb = XLSX.utils.book_new();
-      let fixos = dados.fixos.map(i => ({Descrição: i.nome, Valor: i.valor, Status: i.pago ? "Pago":"Pendente"}));
-      let variaveis = dados.variaveis.map(i => ({Descrição: i.nome, Valor: i.valor, Status: i.pago ? "Pago":"Pendente"}));
-      let ws1 = XLSX.utils.json_to_sheet(fixos);
-      let ws2 = XLSX.utils.json_to_sheet(variaveis);
-      XLSX.utils.book_append_sheet(wb, ws1, "Fixos");
-      XLSX.utils.book_append_sheet(wb, ws2, "Variáveis");
-      XLSX.writeFile(wb, `Planilha_${dados.ano}_${dados.mes+1}.xlsx`);
-    }
-
-    // inicial render
-    renderizar();
+    carregarDados();
   </script>
 </body>
 </html>
